@@ -1,4 +1,4 @@
-const CACHE = "run-training-v1";
+const CACHE = "run-training-v3";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -10,13 +10,17 @@ self.addEventListener("activate", e => {
   ).then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", e => {
-  e.respondWith(
-    caches.match(e.request).then(hit => hit ||
-      fetch(e.request).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+  const req = e.request;
+  // Network-first for the page itself, so new deploys show up immediately
+  if (req.mode === "navigate" || req.destination === "document") {
+    e.respondWith(
+      fetch(req).then(res => {
+        caches.open(CACHE).then(c => c.put(req, res.clone())).catch(() => {});
         return res;
-      }).catch(() => caches.match("./index.html"))
-    )
-  );
+      }).catch(() => caches.match(req).then(hit => hit || caches.match("./index.html")))
+    );
+    return;
+  }
+  // Cache-first for static assets (icons, manifest)
+  e.respondWith(caches.match(req).then(hit => hit || fetch(req)));
 });
